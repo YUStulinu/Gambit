@@ -18,7 +18,7 @@ How it is built:
  best net ─┤ 1. self-play   4096 games, MCTS with 200 simulations per move     │
            │ 2. training    the trained net learns from the recent positions   │
            │ 3. gating      candidate vs best, 200 games: it replaces the best │──> best net
-           │                only if it scores >= 55%                           │
+           │                only if it is better with 95% confidence (LOS)     │
            │ 4. rating      Elo update; every 5 generations: matches against   │
            │                fixed opponents and grading by the perfect solver  │
            └───────────────────────────────────────────────────────────────────┘
@@ -46,10 +46,11 @@ How it is built:
   A lock-free cache of evaluations skips about a third of the network calls, because every game starts from the same position and openings repeat.
 - **Playout cap randomisation** ([KataGo](https://arxiv.org/abs/1902.10565)). 25% of moves get a full 200-simulation search and become training examples. The rest are played with 40 simulations and recorded nowhere, so games finish ~3× faster without weakening the targets.
 - **Symmetry augmentation.** Every training position is used in a random mirror image (and in Gomoku, any of the 8 symmetries of the square).
+- **Random openings.** Every self-play game starts with 0–4 uniformly random moves (see *Lessons* below for why).
 
 With all this, an RTX 2060 plays about **110 games/s ≈ 190,000 simulations/s** of Connect Four self-play.
 
-**Gating and Elo.** After training, a candidate network plays the current best in a 200-game match, with colours alternating and the first moves sampled. It replaces the best only if it scores at least 55%. Elo comes from maximum likelihood (the Bradley–Terry model, by Hunter's MM algorithm) over all the games played. The scale is anchored at a fixed opponent: classic MCTS with random rollouts and 200 simulations, rated 0.
+**Gating and Elo.** After training, a candidate network plays the current best in a 200-game match. The match uses random openings, each played twice with colours swapped. The candidate replaces the best only if its *likelihood of superiority* is at least 95%. That figure is Φ((wins − losses) / √(wins + losses)), the standard test in chess-engine development. Unlike AlphaZero's "score ≥ 55%", it stays meaningful when most games between strong players are draws. Elo comes from maximum likelihood (the Bradley–Terry model, by Hunter's MM algorithm) over all the games played. The scale is anchored at a fixed opponent: classic MCTS with random rollouts and 200 simulations, rated 0.
 
 Gating matches are a chain in which each network meets only its predecessor, which tends to inflate the ratings. So the final curve also comes from a **round-robin tournament** between saved generations, where every network meets every other.
 
@@ -63,6 +64,23 @@ Gating matches are a chain in which each network meets only its predecessor, whi
 The test set holds 1000 positions, 10–30 moves deep, every move scored exactly (`data/connect4-solved.txt`). Trivial positions are excluded: one-move wins, forced blocks, and positions where every move is equally good. On them Gambit reports two numbers:
 - **Blunder rate:** among positions that are not already lost, how often the AI's move throws away the win or the draw.
 - **Score against the perfect player:** after 10 random opening moves, each opening is played twice with colours swapped, so a perfect player would score exactly 50%.
+
+## Lessons
+
+**The first run collapsed into one drawn game.** The first training run sampled only its first 8 moves in proportion to the visit counts. By generation ~33 the policy had become so sharp that this "sampling" chose the same moves every time:
+- 95% of the 4096 self-play games were the same draw (`444444…`, the centre column filled first, then the board);
+- the value head learned to predict 0 everywhere;
+- every gating match ended at exactly 50%, so no candidate was ever accepted.
+
+The network was not near-perfect: against the solver it scored only 34%. The run is kept in `runs/connect4-v1`.
+
+Two changes fixed it:
+1. games start with a few uniformly random moves, so the network faces thousands of different openings and must learn to *win* the won ones, not just hold one line;
+2. gating uses the likelihood of superiority instead of a score threshold.
+
+This mirrors what AlphaZero-style projects run into in practice: in a small game, exploration has to be forced explicitly.
+
+**"Optimal move" is the wrong metric for AlphaZero.** The solver's exact score rewards the *fastest* win. AlphaZero maximises its probability of winning and is indifferent to a slower, safer win. So the fraction of exactly-optimal moves stalled at ~70% while the network kept getting stronger. The fair measure is the blunder rate: how often a move gives away a win or a draw.
 
 ## The desktop app
 
@@ -112,6 +130,7 @@ gambit bench --game connect4                                         # speed of 
 gambit arena --game connect4 --a models/connect4.gnet --b perfect --games 100
 gambit arena --game connect4 --a runs/connect4/models/gen-0040.pt --b rollout:20000
 gambit play  --game connect4                                         # console game
+gambit solve --game connect4 --moves 4453432                         # exact score of every move
 gambit export --game connect4 --model runs/connect4/models/best.pt --out models/connect4.gnet
 ```
 
@@ -129,7 +148,8 @@ gambit export --game connect4 --model runs/connect4/models/best.pt --out models/
 | `--lr` | `0.02` | SGD learning rate (×0.3 after 60% of the run, ×0.1 after 85%) |
 | `--window` | `250000` | replay window (positions) |
 | `--reuse` | `4` | how many times each new position is used in training |
-| `--gate` | `0.55` | score a candidate needs to become the best |
+| `--gate` | `0.95` | likelihood of superiority a candidate needs to become the best |
+| `--random-opening` | `4` | maximum number of random moves at the start of each self-play game |
 | `--fp32` | off | self-play inference in fp32 instead of fp16 |
 
 ## Project layout

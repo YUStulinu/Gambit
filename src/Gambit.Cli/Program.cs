@@ -13,6 +13,7 @@ const string Usage = """
       bench         speed of the move generator, the network, the solver and self-play
       play          play against a network in the console
       tournament    round robin between saved generations: an Elo curve where every network meets every other
+      solve         exact score of every move of a Connect Four position (--moves 4453)
       chart         redraw a run's progress chart (progress.svg) from its log
 
     examples:
@@ -41,6 +42,7 @@ try
         "play" => Games.Dispatch(game, new PlayCommand(), a),
         "chart" => Games.Dispatch(game, new ChartCommand(), a),
         "tournament" => Games.Dispatch(game, new TournamentCommand(), a),
+        "solve" => Games.Dispatch(game, new SolveCommand(), a),
         _ => throw new ArgumentException($"unknown command '{args[0]}'\n\n{Usage}"),
     };
 }

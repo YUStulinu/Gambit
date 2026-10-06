@@ -189,3 +189,25 @@ public sealed class TournamentCommand : IGameCommand
         return 0;
     }
 }
+
+/// <summary>gambit solve --moves 4453432: the exact score of every move in a Connect Four position.</summary>
+public sealed class SolveCommand : IGameCommand
+{
+    public int Run<TGame>(Args args) where TGame : unmanaged, IGame<TGame>
+    {
+        string moves = args.Get("moves", "");
+        args.CheckUnused();
+        if (typeof(TGame) != typeof(ConnectFour)) throw new ArgumentException("the solver is for connect4");
+        var g = ConnectFour.FromMoves(moves);
+        Console.Write(g.Render());
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var scores = new Gambit.Core.Solver.ConnectFourSolver().ScoreMoves(g);
+        for (int c = 0; c < 7; c++)
+        {
+            if (scores[c] is not { } s) continue;
+            Console.WriteLine($"column {c + 1}: score {s,3}  {(s > 0 ? "win" : s == 0 ? "draw" : "loss")}");
+        }
+        Console.WriteLine($"({sw.Elapsed.TotalSeconds:F1}s)");
+        return 0;
+    }
+}
