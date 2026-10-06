@@ -1,0 +1,83 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:app="clr-namespace:Gambit.App"
+        x:Class="Gambit.App.MainWindow"
+        Title="Gambit" Width="1180" Height="760" MinWidth="900" MinHeight="600"
+        Background="#f6f7f9">
+  <Grid ColumnDefinitions="*,380">
+    <Border Grid.Column="0" Margin="24" Padding="8">
+      <app:BoardControl x:Name="Board" />
+    </Border>
+
+    <Border Grid.Column="1" Background="White" BorderBrush="#e3e6ea" BorderThickness="1,0,0,0">
+      <ScrollViewer>
+        <StackPanel Margin="22,18" Spacing="12">
+          <StackPanel Spacing="2">
+            <TextBlock Text="Gambit" FontSize="26" FontWeight="Bold" />
+            <TextBlock Text="An AlphaZero-style player that taught itself, from self-play alone."
+                       TextWrapping="Wrap" Foreground="#6c757d" FontSize="12" />
+          </StackPanel>
+
+          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="10">
+            <TextBlock Grid.Row="0" Text="Game" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="0" Grid.Column="1" x:Name="GameBox" HorizontalAlignment="Stretch" SelectedIndex="0">
+              <ComboBoxItem Content="Connect Four" />
+              <ComboBoxItem Content="Gomoku 9x9 (five in a row)" />
+            </ComboBox>
+            <TextBlock Grid.Row="1" Text="You play" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="1" Grid.Column="1" x:Name="SideBox" HorizontalAlignment="Stretch" SelectedIndex="0">
+              <ComboBoxItem Content="First" />
+              <ComboBoxItem Content="Second" />
+              <ComboBoxItem Content="Both sides (analysis mode)" />
+            </ComboBox>
+            <TextBlock Grid.Row="2" Text="AI strength" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="2" Grid.Column="1" x:Name="StrengthBox" HorizontalAlignment="Stretch" SelectedIndex="2">
+              <ComboBoxItem Content="Raw network (1 simulation)" />
+              <ComboBoxItem Content="Casual (50 simulations)" />
+              <ComboBoxItem Content="Strong (400 simulations)" />
+              <ComboBoxItem Content="Very strong (1600 simulations)" />
+              <ComboBoxItem Content="Maximum (6400 simulations)" />
+            </ComboBox>
+          </Grid>
+
+          <WrapPanel Orientation="Horizontal">
+            <Button x:Name="NewGameButton" Content="New game" Margin="0,0,6,6" Classes="accent" />
+            <Button x:Name="UndoButton" Content="Undo" Margin="0,0,6,6" />
+            <Button x:Name="HintButton" Content="Hint" Margin="0,0,6,6" />
+            <Button x:Name="StopButton" Content="Move now" Margin="0,0,6,6" IsEnabled="False" />
+          </WrapPanel>
+          <CheckBox x:Name="ShowThinking" Content="Show what the AI is considering" IsChecked="True" />
+
+          <Border Background="#f1f3f5" CornerRadius="8" Padding="12">
+            <StackPanel Spacing="6">
+              <TextBlock x:Name="StatusText" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <TextBlock x:Name="EvalLabel" Foreground="#495057" FontSize="12" TextWrapping="Wrap" />
+              <Grid Height="14">
+                <Border Background="#ffd8a8" CornerRadius="7" />
+                <Border x:Name="EvalBar" Background="#e8590c" CornerRadius="7" HorizontalAlignment="Left" Width="0" />
+              </Grid>
+              <TextBlock x:Name="SearchInfo" Foreground="#868e96" FontSize="11" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Moves the AI considered" FontWeight="SemiBold" />
+            <Grid ColumnDefinitions="54,*,58,58" Margin="0,2,0,0">
+              <TextBlock Grid.Column="0" Text="move" Foreground="#868e96" FontSize="11" />
+              <TextBlock Grid.Column="1" Text="share of the search" Foreground="#868e96" FontSize="11" />
+              <TextBlock Grid.Column="2" Text="prior" Foreground="#868e96" FontSize="11" HorizontalAlignment="Right" />
+              <TextBlock Grid.Column="3" Text="win %" Foreground="#868e96" FontSize="11" HorizontalAlignment="Right" />
+            </Grid>
+            <StackPanel x:Name="MoveList" Spacing="3" />
+            <TextBlock x:Name="PvText" Foreground="#495057" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
+          </StackPanel>
+
+          <TextBlock x:Name="HelpText" Foreground="#868e96" FontSize="11" TextWrapping="Wrap"
+                     Text="share of the search: how many of the AI's simulations went into each move - the AlphaZero search spends its time on the moves it believes in. prior: the network's first impression, before searching. win %: the AI's estimate for the player making that move." />
+          <TextBlock x:Name="NetworkText" Foreground="#adb5bd" FontSize="11" TextWrapping="Wrap" />
+          <TextBlock x:Name="MovesText" Foreground="#adb5bd" FontSize="11" TextWrapping="Wrap" />
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+  </Grid>
+</Window>

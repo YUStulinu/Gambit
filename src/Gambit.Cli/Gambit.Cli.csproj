@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <AssemblyName>gambit</AssemblyName>
+    <!-- The native libtorch runtime: CUDA on Windows by default. Build with -p:TorchRuntime=cpu for a
+         CPU-only libtorch, or -p:TorchRuntime=none to compile without any native runtime (CI). -->
+    <TorchRuntime Condition="'$(TorchRuntime)' == ''">cuda</TorchRuntime>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TorchRuntime)' == 'cuda' And $([MSBuild]::IsOSPlatform('Windows'))">
+    <PackageReference Include="TorchSharp-cuda-windows" Version="0.107.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TorchRuntime)' == 'cuda' And $([MSBuild]::IsOSPlatform('Linux'))">
+    <PackageReference Include="TorchSharp-cuda-linux" Version="0.107.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TorchRuntime)' == 'cpu'">
+    <PackageReference Include="TorchSharp-cpu" Version="0.107.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Gambit.Core\Gambit.Core.csproj" />
+    <ProjectReference Include="..\Gambit.Neural\Gambit.Neural.csproj" />
+  </ItemGroup>
+
+</Project>

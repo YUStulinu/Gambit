@@ -1,0 +1,8 @@
+bin/
+obj/
+out/
+runs/
+*.user
+.vs/
+.vscode/
+TestResults/
