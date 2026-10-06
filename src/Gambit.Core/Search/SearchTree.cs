@@ -310,8 +310,8 @@ public sealed class SearchTree<TGame> where TGame : struct, IGame<TGame>
     }
 
     /// <summary>
-    /// Picks a root move: proportionally to visits^(1/temperature), or the most visited (ties
-    /// broken by value) when temperature is 0.
+    /// Picks a root move: proportionally to visits^(1/temperature), or the most visited when
+    /// temperature is 0.
     /// </summary>
     public int ChooseMove(float temperature)
     {
@@ -325,9 +325,12 @@ public sealed class SearchTree<TGame> where TGame : struct, IGame<TGame>
             {
                 ref Node a = ref _nodes[first + i];
                 ref Node b = ref _nodes[best];
-                if (a.Visits > b.Visits ||
-                    (a.Visits == b.Visits && a.Visits > 0 && a.ValueSum / a.Visits > b.ValueSum / b.Visits))
-                    best = first + i;
+                // Most visits; ties broken by value, then by the network's prior (with a single
+                // simulation no child has been visited and the prior alone decides).
+                bool better = a.Visits > b.Visits ||
+                              (a.Visits == b.Visits && a.Visits > 0 && a.ValueSum / a.Visits > b.ValueSum / b.Visits) ||
+                              (a.Visits == b.Visits && a.Visits == 0 && a.Prior > b.Prior);
+                if (better) best = first + i;
             }
             return _nodes[best].Action;
         }

@@ -126,3 +126,26 @@ public class SearchTests
         Assert.True(wins >= 9, $"pure MCTS won only {wins}/10");
     }
 }
+
+public class ChooseMoveTests
+{
+    /// <summary>Puts all the prior on one action.</summary>
+    sealed class OneMoveEvaluator(int action) : IEvaluator<ConnectFour>
+    {
+        public void Evaluate(ReadOnlySpan<ConnectFour> states, Span<float> logits, Span<float> values)
+        {
+            for (int i = 0; i < states.Length; i++)
+            {
+                for (int a = 0; a < 7; a++) logits[i * 7 + a] = a == action ? 5f : 0f;
+                values[i] = 0;
+            }
+        }
+    }
+
+    [Fact]
+    public void A_single_simulation_plays_the_network_choice()
+    {
+        var player = new MctsPlayer<ConnectFour>(new OneMoveEvaluator(5), 1);
+        Assert.Equal(5, player.ChooseMove(ConnectFour.Initial));
+    }
+}
