@@ -9,7 +9,25 @@ public readonly record struct MatchResult(int WinsA, int Draws, int WinsB)
     public int Games => WinsA + Draws + WinsB;
     public double ScoreA => Games == 0 ? 0.5 : (WinsA + 0.5 * Draws) / Games;
     public double EloDifference => EloTable.DifferenceFromScore(ScoreA);
-    public override string ToString() => $"+{WinsA} ={Draws} -{WinsB} ({100 * ScoreA:F1}%, {EloDifference:+0;-0} Elo)";
+
+    /// <summary>
+    /// Likelihood of superiority: the probability that A is stronger than B given the decisive games
+    /// (draws carry no information about which is stronger), Phi((wins - losses) / sqrt(wins + losses)).
+    /// The usual test in engine development; unlike a fixed score threshold it stays meaningful when
+    /// most games are drawn.
+    /// </summary>
+    public double LikelihoodOfSuperiority => WinsA + WinsB == 0 ? 0.5 : NormalCdf((WinsA - WinsB) / Math.Sqrt(WinsA + WinsB));
+
+    static double NormalCdf(double x)
+    {
+        // Abramowitz-Stegun 7.1.26 approximation of erf, accurate to 1.5e-7.
+        double t = 1 / (1 + 0.3275911 * Math.Abs(x) / Math.Sqrt(2));
+        double y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t
+                   * Math.Exp(-x * x / 2);
+        return x >= 0 ? (1 + y) / 2 : (1 - y) / 2;
+    }
+    public override string ToString() =>
+        $"+{WinsA} ={Draws} -{WinsB} ({100 * ScoreA:F1}%, {EloDifference:+0;-0} Elo, LOS {100 * LikelihoodOfSuperiority:F0}%)";
 }
 
 public sealed record ArenaConfig
@@ -19,7 +37,8 @@ public sealed record ArenaConfig
     public int SimulationsB { get; init; } = 200;
     /// <summary>Games played at once (their leaves are batched per evaluator).</summary>
     public int Parallel { get; init; } = 100;
-    /// <summary>The first moves are sampled in proportion to visits, so the games differ.</summary>
+    /// <summary>Each game starts with this many uniformly random moves, so the games differ; games 2k
+    /// and 2k+1 share their opening with colours swapped, which cancels out an unbalanced opening.</summary>
     public int RandomOpeningMoves { get; init; } = 4;
     /// <summary>Leaves each game selects per step (with virtual loss): more means fewer, larger batches.</summary>
     public int LeavesPerStepA { get; init; } = 1;
@@ -44,10 +63,30 @@ public static class Arena
         var aFirst = new bool[parallel];
         var active = new bool[parallel];
         int nextGame = 0, winsA = 0, draws = 0, winsB = 0, done = 0;
+        // The random opening of game g (shared by games 2k and 2k+1).
+        TGame Opening(int game)
+        {
+            var rng = new Random(cfg.Seed * 7919 + game / 2);
+            Span<int> moves = stackalloc int[TGame.ActionCount];
+            while (true)
+            {
+                var s = TGame.Initial;
+                for (int k = 0; k < cfg.RandomOpeningMoves && !s.Outcome.IsOver(); k++)
+                {
+                    int n = s.LegalMoves(moves);
+                    s.Play(moves[rng.Next(n)]);
+                }
+                if (!s.Outcome.IsOver()) return s;
+            }
+        }
+
         for (int i = 0; i < parallel; i++)
         {
             trees[i, 0] = new SearchTree<TGame>(search, cfg.Seed * 31 + 2 * i);
             trees[i, 1] = new SearchTree<TGame>(search, cfg.Seed * 31 + 2 * i + 1);
+            var start = Opening(nextGame);
+            trees[i, 0].Reset(start);
+            trees[i, 1].Reset(start);
             aFirst[i] = nextGame % 2 == 0;
             active[i] = true;
             nextGame++;
@@ -66,8 +105,10 @@ public static class Arena
         var evals = new[] { a, b };
         var sims = new[] { cfg.SimulationsA, cfg.SimulationsB };
 
-        // Which player (0 = A, 1 = B) moves in slot i.
-        int Mover(int i) => (trees[i, 0].RootState.SideToMove == 0) == aFirst[i] ? 0 : 1;
+        // Which player (0 = A, 1 = B) moves in slot i: A has the side that moves first after the opening
+        // in even games, the other side in odd games.
+        int openingParity = cfg.RandomOpeningMoves & 1;
+        int Mover(int i) => ((trees[i, 0].RootState.SideToMove ^ openingParity) == 0) == aFirst[i] ? 0 : 1;
 
         while (done < cfg.Games && !cancel.IsCancellationRequested)
         {
@@ -116,8 +157,7 @@ public static class Arena
                 int p = Mover(i);
                 var tree = trees[i, p];
                 if (!tree.RootExpanded || tree.RootVisits < sims[p]) continue;
-                var root = tree.RootState;
-                int move = tree.ChooseMove(root.Ply < cfg.RandomOpeningMoves ? 1f : 0f);
+                int move = tree.ChooseMove(0f);
                 trees[i, 0].Advance(move);
                 trees[i, 1].Advance(move);
                 var next = trees[i, 0].RootState;
@@ -131,9 +171,10 @@ public static class Arena
                 if (nextGame < cfg.Games)
                 {
                     aFirst[i] = nextGame % 2 == 0;
+                    var start = Opening(nextGame);
                     nextGame++;
-                    trees[i, 0].Reset(TGame.Initial);
-                    trees[i, 1].Reset(TGame.Initial);
+                    trees[i, 0].Reset(start);
+                    trees[i, 1].Reset(start);
                 }
                 else active[i] = false;
             }

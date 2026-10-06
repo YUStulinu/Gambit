@@ -46,6 +46,12 @@ public sealed record SelfPlayConfig
     /// <summary>Moves at the start of a game played proportionally to visits (temperature 1); later moves are greedy.</summary>
     public int TemperatureMoves { get; init; } = 10;
 
+    /// <summary>Every game starts with a uniformly random number (0 to this) of uniformly random moves.
+    /// Without it, once the policy becomes sharp, sampling by visits keeps choosing the same opening
+    /// and self-play collapses into thousands of copies of one game; with it the network has to learn
+    /// to win the won positions and hold the drawn ones of every kind of opening.</summary>
+    public int RandomOpeningMoves { get; init; } = 0;
+
     /// <summary>Value target = (1 - mix) * game result + mix * search value.</summary>
     public float ValueTargetMix { get; init; } = 0.0f;
 
@@ -119,6 +125,7 @@ public sealed class SelfPlayEngine<TGame> where TGame : struct, IGame<TGame>
                 Tree = new SearchTree<TGame>(searchCfg, _cfg.Seed * 7919 + i),
                 Rng = new Random(_cfg.Seed * 104729 + i),
             };
+            NewGame(slots[i]);
             StartMove(slots[i]);
             started++;
         }
@@ -222,7 +229,7 @@ public sealed class SelfPlayEngine<TGame> where TGame : struct, IGame<TGame>
                         else s.Active = false;
                     }
                     s.Record = new GameRecord<TGame>();
-                    s.Tree.Reset(TGame.Initial);
+                    NewGame(s);
                 }
                 StartMove(s);
             });
@@ -243,6 +250,27 @@ public sealed class SelfPlayEngine<TGame> where TGame : struct, IGame<TGame>
             else stats.Draws++;
         }
         return finished;
+    }
+
+    /// <summary>Resets the slot to a new game, after its random opening moves (recorded, not sampled).</summary>
+    void NewGame(Slot s)
+    {
+        var state = TGame.Initial;
+        int random = _cfg.RandomOpeningMoves > 0 ? s.Rng.Next(_cfg.RandomOpeningMoves + 1) : 0;
+        Span<int> moves = stackalloc int[TGame.ActionCount];
+        for (int k = 0; k < random && !state.Outcome.IsOver(); k++)
+        {
+            int n = state.LegalMoves(moves);
+            int m = moves[s.Rng.Next(n)];
+            state.Play(m);
+            s.Record.Moves.Add(m);
+        }
+        if (state.Outcome.IsOver())
+        {
+            state = TGame.Initial;
+            s.Record.Moves.Clear();
+        }
+        s.Tree.Reset(state);
     }
 
     void StartMove(Slot s)

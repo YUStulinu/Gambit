@@ -30,7 +30,7 @@ public sealed class TrainCommand : IGameCommand
     sealed record Options
     {
         public string Run = "";
-        public int Generations, GamesPerGeneration, Parallel, Simulations, FastSimulations, TemperatureMoves;
+        public int Generations, GamesPerGeneration, Parallel, Simulations, FastSimulations, TemperatureMoves, RandomOpening;
         public float FullSearchProbability, DirichletAlpha, ValueMix, Gate;
         public int Blocks, Channels, BatchSize, ReplayWindow, ArenaGames, ArenaSimulations, EvalEvery, AnchorGames;
         public double LearningRate, SampleReuse;
@@ -51,9 +51,10 @@ public sealed class TrainCommand : IGameCommand
             FastSimulations = a.Int("fast-sims", c4 ? 40 : 60),
             FullSearchProbability = a.Float("full-prob", 0.25f),
             TemperatureMoves = a.Int("temperature-moves", c4 ? 8 : 12),
+            RandomOpening = a.Int("random-opening", c4 ? 4 : 2),
             DirichletAlpha = a.Float("alpha", c4 ? 1.0f : 0.2f),
             ValueMix = a.Float("value-mix", 0.0f),
-            Gate = a.Float("gate", 0.55f),
+            Gate = a.Float("gate", 0.95f),
             Blocks = a.Int("blocks", 6),
             Channels = a.Int("channels", 64),
             BatchSize = a.Int("batch", 512),
@@ -169,6 +170,7 @@ public sealed class TrainCommand : IGameCommand
                     ParallelGames = o.Parallel, Simulations = o.Simulations, FastSimulations = o.FastSimulations,
                     FullSearchProbability = o.FullSearchProbability, TemperatureMoves = o.TemperatureMoves,
                     DirichletAlpha = o.DirichletAlpha, ValueTargetMix = o.ValueMix, Seed = o.Seed * 100_003 + gen,
+                    RandomOpeningMoves = o.RandomOpening,
                 });
                 games = engine.Play(o.GamesPerGeneration, stats);
             }
@@ -196,12 +198,14 @@ public sealed class TrainCommand : IGameCommand
                 {
                     Games = o.ArenaGames, SimulationsA = o.ArenaSimulations, SimulationsB = o.ArenaSimulations,
                     Parallel = o.ArenaGames, Seed = gen, LeavesPerStepA = 4, LeavesPerStepB = 4,
+                    RandomOpeningMoves = o.RandomOpening,
                 });
             }
             double arenaSeconds = sw.Elapsed.TotalSeconds;
             string candName = $"gen-{gen:D4}", bestName = $"gen-{bestGen:D4}";
             elo.Add(candName, bestName, arena.WinsA, arena.Draws, arena.WinsB);
-            bool accepted = arena.ScoreA >= o.Gate;
+            // Gate on the likelihood of superiority (draws are common between strong players).
+            bool accepted = arena.WinsA > arena.WinsB && arena.LikelihoodOfSuperiority >= o.Gate;
             Console.WriteLine($"arena {candName} vs {bestName}: {arena} -> {(accepted ? "ACCEPTED" : "rejected")}");
             if (accepted)
             {

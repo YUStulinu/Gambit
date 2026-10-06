@@ -274,3 +274,44 @@ public class SelfPlayAndArenaTests
         Assert.Equal(76, move);
     }
 }
+
+public class OpeningAndGatingTests
+{
+    [Fact]
+    public void Likelihood_of_superiority_ignores_draws()
+    {
+        Assert.Equal(0.5, new MatchResult(10, 80, 10).LikelihoodOfSuperiority, 6);
+        Assert.InRange(new MatchResult(20, 170, 10).LikelihoodOfSuperiority, 0.95, 0.97);   // Phi(10 / sqrt(30)) = 0.966
+        Assert.True(new MatchResult(60, 0, 40).LikelihoodOfSuperiority < new MatchResult(30, 160, 10).LikelihoodOfSuperiority);
+    }
+
+    [Fact]
+    public void Random_openings_make_self_play_games_differ()
+    {
+        // A deterministic evaluator: without random openings every game would be identical.
+        var engine = new SelfPlayEngine<ConnectFour>(new UniformEvaluator<ConnectFour>(), new SelfPlayConfig
+        {
+            ParallelGames = 16, Simulations = 8, FastSimulations = 8, FullSearchProbability = 1f, TemperatureMoves = 0,
+            RandomOpeningMoves = 4, Seed = 5,
+        });
+        var games = engine.Play(16, new SelfPlayStats());
+        int distinct = games.Select(g => string.Join(",", g.Moves)).Distinct().Count();
+        Assert.True(distinct >= 10, $"only {distinct} distinct games");
+        foreach (var g in games)
+        {
+            var s = ConnectFour.Initial;
+            foreach (int m in g.Moves) s.Play(m);
+            Assert.True(s.Outcome.IsOver());
+        }
+    }
+
+    [Fact]
+    public void Identical_players_split_paired_openings_evenly()
+    {
+        // Equally strong players, every opening played once from each side: the score must be near 50%.
+        var r = Arena.Play<ConnectFour>(new RolloutEvaluator<ConnectFour>(1, 1), new RolloutEvaluator<ConnectFour>(1, 1),
+                                        new ArenaConfig { Games = 40, SimulationsA = 30, SimulationsB = 30, Parallel = 40, RandomOpeningMoves = 3 });
+        Assert.Equal(40, r.Games);
+        Assert.InRange(r.ScoreA, 0.3, 0.7);
+    }
+}
