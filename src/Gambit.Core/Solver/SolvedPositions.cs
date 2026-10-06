@@ -17,10 +17,17 @@ public sealed record SolvedPosition(string Moves, int?[] Scores)
 }
 
 /// <summary>Accuracy of a player against the perfect solver.</summary>
-public sealed record SolverAccuracy(int Positions, double Optimal, double KeepsResult, double ValueSign)
+/// <param name="Optimal">Share of positions where the move has the best exact score (fastest win / slowest loss).</param>
+/// <param name="KeepsResult">Share of positions where the move keeps the theoretical result.</param>
+/// <param name="BlunderRate">Among positions that are not already lost, the share where the move throws
+/// away the win or the draw - the measure that matters for a player that, like AlphaZero, maximises
+/// its chance of winning rather than the speed of the win.</param>
+/// <param name="ValueSign">Share of positions where the value's sign (win / draw / loss) is right.</param>
+public sealed record SolverAccuracy(int Positions, double Optimal, double KeepsResult, double BlunderRate, double ValueSign)
 {
     public override string ToString() =>
-        $"optimal move {100 * Optimal:F1}%, result-preserving move {100 * KeepsResult:F1}%, value sign {100 * ValueSign:F1}% ({Positions} positions)";
+        $"blunders {100 * BlunderRate:F1}%, result-preserving {100 * KeepsResult:F1}%, fastest-optimal {100 * Optimal:F1}%, " +
+        $"value sign {100 * ValueSign:F1}% ({Positions} positions)";
 }
 
 /// <summary>
@@ -104,7 +111,7 @@ public static class SolvedPositions
     /// </summary>
     public static SolverAccuracy Grade(IReadOnlyList<SolvedPosition> set, IEvaluator<ConnectFour> eval, int simulations, int parallel = 256)
     {
-        int optimal = 0, keeps = 0, sign = 0;
+        int optimal = 0, keeps = 0, sign = 0, notLost = 0, blunders = 0;
         var states = set.Select(p => p.State).ToArray();
         var chosen = new int[set.Count];
         var value = new float[set.Count];
@@ -139,11 +146,16 @@ public static class SolvedPositions
         {
             if (set[i].IsOptimal(chosen[i])) optimal++;
             if (set[i].KeepsResult(chosen[i])) keeps++;
+            if (set[i].Result >= 0)
+            {
+                notLost++;
+                if (!set[i].KeepsResult(chosen[i])) blunders++;
+            }
             int predicted = value[i] > 0.33f ? 1 : value[i] < -0.33f ? -1 : 0;
             if (predicted == set[i].Result) sign++;
         }
         double n0 = Math.Max(set.Count, 1);
-        return new SolverAccuracy(set.Count, optimal / n0, keeps / n0, sign / n0);
+        return new SolverAccuracy(set.Count, optimal / n0, keeps / n0, blunders / (double)Math.Max(notLost, 1), sign / n0);
     }
 }
 

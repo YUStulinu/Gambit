@@ -35,7 +35,15 @@ public sealed class EvalCommand : IGameCommand
         int games = args.Int("games", 100);
         bool baselines = args.Flag("baselines");
         string setPath = args.Get("set", Path.Combine("data", "connect4-solved.txt"));
+        string? run = args.GetOrNull("run");
+        int every = args.Int("every", 5);
+        int perfectGames = args.Int("perfect-games", 60);
         args.CheckUnused();
+        if (run != null)
+        {
+            if (typeof(TGame) != typeof(ConnectFour)) throw new ArgumentException("--run evaluation needs the Connect Four solver");
+            return EvaluateRun(run, every, sims, perfectGames, SolvedPositions.Load(setPath));
+        }
 
         if (typeof(TGame) == typeof(ConnectFour))
         {
@@ -82,6 +90,35 @@ public sealed class EvalCommand : IGameCommand
                 Console.WriteLine($"network ({sims} sims) vs {anchor}: {r}");
             }
         }
+        return 0;
+    }
+
+    /// <summary>Grades every <paramref name="every"/>-th saved generation of a run; writes evaluation.tsv.</summary>
+    static int EvaluateRun(string run, int every, int sims, int perfectGames, List<SolvedPosition> set)
+    {
+        var models = Directory.GetFiles(Path.Combine(run, "models"), "gen-*.pt")
+            .Select(p => (Path: p, Gen: int.Parse(Path.GetFileNameWithoutExtension(p)[4..]))).OrderBy(m => m.Gen).ToList();
+        var chosen = models.Where((m, i) => m.Gen % every == 0 || i == models.Count - 1 || m.Gen == 0)
+                           .GroupBy(m => m.Gen / every).Select(g => g.Last()).ToList();
+        if (chosen[^1].Gen != models[^1].Gen) chosen.Add(models[^1]);
+        string path = Path.Combine(run, "evaluation.tsv");
+        var lines = new List<string> { "generation	blunders_raw	blunders_mcts	keeps_mcts	optimal_mcts	value_sign	score_vs_perfect" };
+        foreach (var (file, gen) in chosen)
+        {
+            var ev = Models.Load<ConnectFour>(file);
+            var raw = SolvedPositions.Grade(set, ev, 0);
+            var mcts = SolvedPositions.Grade(set, ev, sims);
+            var locked = new LockedEvaluator<ConnectFour>(ev);
+            var vsPerfect = Arena.PlayPlayers<ConnectFour>(_ => new MctsPlayer<ConnectFour>(locked, sims, 16), _ => new SolverPlayer(),
+                                                           perfectGames, 10);
+            Console.WriteLine($"gen-{gen:D4}: raw {raw}");
+            Console.WriteLine($"          MCTS {sims}: {mcts}; vs perfect play: {vsPerfect}");
+            lines.Add(string.Join('	', new object[] { gen, raw.BlunderRate, mcts.BlunderRate, mcts.KeepsResult, mcts.Optimal,
+                                                       mcts.ValueSign, vsPerfect.ScoreA }
+                .Select(o => Convert.ToString(o, System.Globalization.CultureInfo.InvariantCulture))));
+            File.WriteAllLines(path, lines);
+        }
+        Console.WriteLine($"-> {path}");
         return 0;
     }
 }

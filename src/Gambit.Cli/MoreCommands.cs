@@ -130,7 +130,11 @@ public sealed class ChartCommand : IGameCommand
         var tournament = File.Exists(tpath)
             ? File.ReadLines(tpath).Select(l => l.Split('\t')).ToDictionary(f => f[0], f => double.Parse(f[1], System.Globalization.CultureInfo.InvariantCulture))
             : null;
-        Charts.WriteProgress(output, TGame.Name, logs, elo.Compute(TrainCommand.Anchors[0].Name, 0), tournament);
+        string epath = Path.Combine(run, "evaluation.tsv");
+        var evaluation = File.Exists(epath)
+            ? File.ReadLines(epath).Skip(1).Select(l => l.Split('	').Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray()).ToList()
+            : null;
+        Charts.WriteProgress(output, TGame.Name, logs, elo.Compute(TrainCommand.Anchors[0].Name, 0), tournament, evaluation);
         Console.WriteLine($"{output}: {logs.Count} generations");
         return 0;
     }

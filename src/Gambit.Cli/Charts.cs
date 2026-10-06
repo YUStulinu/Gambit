@@ -62,7 +62,8 @@ public static class Charts
 
     public static void WriteProgress(string path, string game, IReadOnlyList<TrainCommand.GenerationLog> logs,
                                      IReadOnlyDictionary<string, double> ratings,
-                                     IReadOnlyDictionary<string, double>? tournament = null)
+                                     IReadOnlyDictionary<string, double>? tournament = null,
+                                     IReadOnlyList<double[]>? evaluation = null)
     {
         const double W = 1100, H = 720;
         var sb = new StringBuilder();
@@ -86,7 +87,14 @@ public static class Charts
         Panel(sb, 0, 0, W / 2, H / 2, $"{game}: Elo of the accepted networks", "generation", [.. series, .. anchorLines]);
 
         var acc = logs.Where(l => l.SolverOptimal.HasValue).ToList();
-        if (acc.Count > 0)
+        if (evaluation is { Count: > 0 })
+            // columns: generation, blunders raw, blunders MCTS, keeps MCTS, optimal MCTS, value sign, score vs perfect
+            Panel(sb, W / 2, 0, W / 2, H / 2, "against perfect play (Connect Four solver)", "generation",
+                  [new Series("blunders, raw network", "#74c0fc", evaluation.Select(e => (e[0], e[1])).ToList()),
+                   new Series("blunders, MCTS 200", "#1971c2", evaluation.Select(e => (e[0], e[2])).ToList()),
+                   new Series("score vs the perfect player (50% = perfect)", "#2b8a3e", evaluation.Select(e => (e[0], e[6])).ToList())],
+                  0, null, "0", 100);
+        else if (acc.Count > 0)
             Panel(sb, W / 2, 0, W / 2, H / 2, "moves graded by the perfect solver (1000 positions)", "generation",
                   [new Series("optimal move, MCTS", "#1971c2", acc.Select(l => ((double)l.Generation, l.SolverOptimal!.Value)).ToList()),
                    new Series("optimal move, raw network", "#74c0fc", acc.Select(l => ((double)l.Generation, l.SolverOptimalRaw ?? double.NaN)).ToList()),
