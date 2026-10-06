@@ -34,12 +34,12 @@ public static class Charts
             sb.Append($"<line x1='{F(x0 + left)}' x2='{F(x0 + left + pw)}' y1='{F(Sy(y))}' y2='{F(Sy(y))}' class='grid'/>");
             sb.Append($"<text x='{F(x0 + left - 6)}' y='{F(Sy(y) + 4)}' class='tick' text-anchor='end'>{(y * yScale).ToString(yFormat, CultureInfo.InvariantCulture)}</text>");
         }
-        int xticks = (int)Math.Min(6, maxX - minX);
-        for (int i = 0; i <= xticks; i++)
-        {
-            double x = minX + (maxX - minX) * i / Math.Max(xticks, 1);
-            sb.Append($"<text x='{F(Sx(x))}' y='{F(y0 + top + ph + 16)}' class='tick' text-anchor='middle'>{Math.Round(x)}</text>");
-        }
+        // Integer ticks at a round step (1, 2, 5, 10, 20, ...).
+        double span = maxX - minX, step = 1;
+        foreach (double c in new double[] { 1, 2, 5, 10, 20, 25, 50, 100, 200, 500 })
+            if (span / c <= 8) { step = c; break; }
+        for (double x = Math.Ceiling(minX / step) * step; x <= maxX + 1e-9; x += step)
+            sb.Append($"<text x='{F(Sx(x))}' y='{F(y0 + top + ph + 16)}' class='tick' text-anchor='middle'>{x:0}</text>");
         sb.Append($"<text x='{F(x0 + left + pw / 2)}' y='{F(y0 + h - 6)}' class='tick' text-anchor='middle'>{xLabel}</text>");
         sb.Append($"<rect x='{F(x0 + left)}' y='{F(y0 + top)}' width='{F(pw)}' height='{F(ph)}' class='frame'/>");
         double ly = y0 + top + 14;
@@ -61,7 +61,8 @@ public static class Charts
     }
 
     public static void WriteProgress(string path, string game, IReadOnlyList<TrainCommand.GenerationLog> logs,
-                                     IReadOnlyDictionary<string, double> ratings)
+                                     IReadOnlyDictionary<string, double> ratings,
+                                     IReadOnlyDictionary<string, double>? tournament = null)
     {
         const double W = 1100, H = 720;
         var sb = new StringBuilder();
@@ -77,8 +78,12 @@ public static class Charts
             .Select((a, i) => new Series($"{a.Name} = {ratings[a.Name]:F0}", i == 0 ? "#999" : "#555",
                                          [(0, ratings[a.Name]), (Math.Max(1, logs.Count > 0 ? logs[^1].Generation : 1), ratings[a.Name])], true))
             .ToList();
-        Panel(sb, 0, 0, W / 2, H / 2, $"{game}: Elo of each accepted network", "generation",
-              [new Series("network", "#d9480f", elo), .. anchorLines]);
+        var series = new List<Series> { new("gating chain", "#d9480f", elo) };
+        if (tournament != null)
+            series.Add(new Series("round-robin tournament", "#1971c2",
+                tournament.Where(kv => kv.Key.StartsWith("gen-")).Select(kv => ((double)int.Parse(kv.Key[4..]), kv.Value))
+                          .OrderBy(p => p.Item1).ToList()));
+        Panel(sb, 0, 0, W / 2, H / 2, $"{game}: Elo of the accepted networks", "generation", [.. series, .. anchorLines]);
 
         var acc = logs.Where(l => l.SolverOptimal.HasValue).ToList();
         if (acc.Count > 0)

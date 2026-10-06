@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Builds everything (warnings are errors) and runs the tests on Linux, Windows and macOS.
+# The training CLI is compiled without the native libtorch runtime (-p:TorchRuntime=none):
+# GitHub's runners have no GPU, and the tests cover the game engines, the search, the solver,
+# self-play, the arena, Elo and the pure C# network - none of which need libtorch.
+
+jobs:
+  build-test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+      - name: Build
+        run: dotnet build Gambit.sln -c Release -p:TorchRuntime=none
+      - name: Test
+        run: dotnet test tests/Gambit.Tests -c Release --no-build

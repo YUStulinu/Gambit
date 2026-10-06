@@ -14,6 +14,7 @@ public partial class MainWindow : Window
     IGameSession _session;
     CancellationTokenSource? _thinking;
     bool _busy;
+    int _searchId;    // progress updates of a finished search are ignored
     bool _suppress;   // ignore selection events while the startup options are applied
 
     public MainWindow()
@@ -168,11 +169,13 @@ public partial class MainWindow : Window
         StatusText.Text = hint ? $"Analysing the position for {PlayerName(_session.SideToMove)}..."
                                : $"{PlayerName(_session.SideToMove)} (AI) is thinking...";
         int ply = _session.Ply;
+        int id = ++_searchId;
         try
         {
             var result = await _session.ThinkAsync(simulations, a => Dispatcher.UIThread.Post(() =>
             {
-                if (_session.Ply != ply) return;
+                // Updates are queued on the UI thread and may arrive after the final result.
+                if (id != _searchId || !_busy || _session.Ply != ply) return;
                 if (ShowThinking.IsChecked == true) Board.ShowAnalysis(a);
                 ShowAnalysisPanel(a, null);
             }), _thinking.Token);
@@ -184,6 +187,7 @@ public partial class MainWindow : Window
         }
         finally
         {
+            _searchId++;
             _busy = false;
             Board.AcceptsInput = true;
             StopButton.IsEnabled = false;
