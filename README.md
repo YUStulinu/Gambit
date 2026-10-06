@@ -9,7 +9,91 @@ How it is built:
 - **Training:** in C# with [TorchSharp](https://github.com/dotnet/TorchSharp) (PyTorch's engine from .NET).
 - **Desktop app:** written with Avalonia, it runs the trained network in plain C# with SIMD and no libtorch. While you play, it shows which moves the AI is considering and how sure it is of each.
 
-⟨RESULTS⟩
+## Results: Connect Four
+
+One training run: 80 generations, **327,680 self-play games**, 2.7 million training positions, **77 minutes on an RTX 2060**, starting from random weights.
+
+![Training progress](docs/progress-connect4.svg)
+
+### Graded by the perfect solver
+
+The test set is 1000 positions, each with a real decision (see below). A *blunder* is a move that gives away a won or drawn position.
+
+| player | blunders | value sign correct |
+|---|---:|---:|
+| random move | 51.5% | — |
+| classic MCTS, 200 random rollouts | 24.6% | 40.1% |
+| classic MCTS, 2,000 random rollouts | 15.7% | 48.7% |
+| classic MCTS, 20,000 random rollouts | 11.8% | 57.1% |
+| Gambit, untrained network + MCTS 200 | 31.6% | 12.7% |
+| Gambit, final network alone (no search) | 14.0% | 78.1% |
+| **Gambit, final network + MCTS 200** | **6.1%** | **87.5%** |
+
+With 200 simulations the trained network blunders **half as often as classic MCTS with 20,000 rollouts**, 100× the search. Even the network alone, with no search at all, plays like 2,000 rollouts.
+
+### Against the perfect player
+
+Games start from 10 random moves, and each opening is played twice with colours swapped, so a perfect player scores exactly 50%.
+
+| generation | 0 | 5 | 15 | 30 | 50 | 71 (final) |
+|---|---:|---:|---:|---:|---:|---:|
+| score vs perfect play | 15% | 30% | 38% | 39% | 43% | 40% |
+| blunders (MCTS 200) | 31.6% | 12.5% | 8.4% | 6.9% | 6.2% | 6.1% |
+
+### Elo
+
+In the round robin every saved network played every other, 100 games per pair, with 4 random opening moves. The scale is anchored at classic MCTS with 200 rollouts = 0.
+
+| player | Elo |
+|---|---:|
+| generation 0 (random weights) | −195 |
+| classic MCTS, 200 rollouts | 0 |
+| classic MCTS, 2000 rollouts | 124 |
+| generation 11 | 339 |
+| generation 21 | 460 |
+| generation 33 | 527 |
+| generation 47 | 554 |
+| generation 61 | 591 |
+| **generation 71 (final)** | **597** |
+
+These ratings are compressed by the random openings: some openings are decided before the networks play, and strong players draw each other a lot. The final network beats classic MCTS with 2000 rollouts 95–5 in direct games.
+
+### Speed (RTX 2060, 6×64 network)
+
+| | |
+|---|---|
+| move generator (bitboards, one thread) | 40 M moves/s |
+| network on the GPU, fp16, batch 1024 | 123,000 positions/s |
+| self-play, 2048 games in parallel | up to 196 games/s, 530,000 simulations/s |
+| the same network in plain C# (one thread / all 12 threads) | 780 / 7,000 positions/s |
+| the network in the app (search with batches of 16) | 1,400–2,400 simulations/s |
+
+## Results: Gomoku 9×9
+
+40 generations, **81,920 self-play games, 66 minutes**, same network size. Gomoku has no solver, so it is measured by Elo only:
+
+| player | round-robin Elo |
+|---|---:|
+| generation 0 (random weights) | −331 |
+| classic MCTS, 200 rollouts | 0 |
+| classic MCTS, 2000 rollouts | 183 |
+| generation 10 | 312 |
+| generation 20 | 640 |
+| generation 30 | 883 |
+| **generation 40 (final)** | **1199** |
+
+The curve was still rising steeply when the run stopped, so longer training would keep paying off.
+
+### Both games against classic MCTS with 100× more search
+
+Gambit used 200 simulations per move, classic MCTS 20,000 random rollouts; 50 games each.
+
+| game | result | score |
+|---|---|---:|
+| Connect Four | +45 −5 | 90% |
+| Gomoku 9×9 | +41 −9 | 82% |
+
+![Gomoku training progress](docs/progress-gomoku.svg)
 
 ## How it learns
 
