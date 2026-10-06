@@ -24,11 +24,13 @@ public sealed class ArenaCommand : IGameCommand
         if (b == "perfect")
         {
             if (typeof(TGame) != typeof(ConnectFour)) throw new ArgumentException("the perfect player exists for connect4 only");
-            var ev = Models.Load<ConnectFour>(a);
-            // The solver needs seconds for positions with fewer than ~10 stones, so both sides play
-            // `openings` random moves first; each opening is played twice with colours swapped.
+            var ev = new LockedEvaluator<ConnectFour>(Models.Load<ConnectFour>(a));
+            // The solver needs seconds for positions with fewer than ~10 stones, so the game starts with
+            // 10 random moves; each opening is played twice with colours swapped. A perfect player
+            // scores exactly 50% here: whatever the opening, it wins every won position and holds
+            // every drawn one, from either side.
             var r = Arena.PlayPlayers<ConnectFour>(_ => new MctsPlayer<ConnectFour>(ev, sims, 16, name: "network"),
-                                                   _ => new SolverPlayer(), games, Math.Max(openings, 8));
+                                                   _ => new SolverPlayer(), games, Math.Max(openings, 10));
             Console.WriteLine($"{a} vs perfect play: {r}");
             return 0;
         }
@@ -126,7 +128,7 @@ public sealed class ChartCommand : IGameCommand
         var elo = EloTable.Load(Path.Combine(run, "elo.tsv"));
         string tpath = Path.Combine(run, "tournament.tsv");
         var tournament = File.Exists(tpath)
-            ? File.ReadLines(tpath).Select(l => l.Split('	')).ToDictionary(f => f[0], f => double.Parse(f[1], System.Globalization.CultureInfo.InvariantCulture))
+            ? File.ReadLines(tpath).Select(l => l.Split('\t')).ToDictionary(f => f[0], f => double.Parse(f[1], System.Globalization.CultureInfo.InvariantCulture))
             : null;
         Charts.WriteProgress(output, TGame.Name, logs, elo.Compute(TrainCommand.Anchors[0].Name, 0), tournament);
         Console.WriteLine($"{output}: {logs.Count} generations");

@@ -64,13 +64,35 @@ public struct Gomoku : IGame<Gomoku>
     public readonly bool IsLegal(int action) =>
         (uint)action < Cells && _outcome == Outcome.Ongoing && ((_black | _white) & Bit(action)) == UInt128.Zero;
 
+    /// <summary>Every cell of the board in the stride-10 layout (the sentinel column excluded).</summary>
+    static readonly UInt128 BoardMask = MakeBoardMask();
+
+    static UInt128 MakeBoardMask()
+    {
+        UInt128 m = UInt128.Zero;
+        for (int a = 0; a < Cells; a++) m |= Bit(a);
+        return m;
+    }
+
     public readonly int LegalMoves(Span<int> buffer)
     {
         if (_outcome != Outcome.Ongoing) return 0;
-        UInt128 occ = _black | _white;
+        // Walk the set bits of the empty cells instead of testing all 81.
+        UInt128 empty = BoardMask & ~(_black | _white);
         int n = 0;
-        for (int a = 0; a < Cells; a++)
-            if ((occ & Bit(a)) == UInt128.Zero) buffer[n++] = a;
+        ulong lo = (ulong)empty, hi = (ulong)(empty >> 64);
+        while (lo != 0)
+        {
+            int bit = System.Numerics.BitOperations.TrailingZeroCount(lo);
+            lo &= lo - 1;
+            buffer[n++] = bit / Stride * Size + bit % Stride;
+        }
+        while (hi != 0)
+        {
+            int bit = 64 + System.Numerics.BitOperations.TrailingZeroCount(hi);
+            hi &= hi - 1;
+            buffer[n++] = bit / Stride * Size + bit % Stride;
+        }
         return n;
     }
 

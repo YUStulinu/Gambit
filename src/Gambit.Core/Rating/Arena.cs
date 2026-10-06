@@ -156,7 +156,7 @@ public static class Arena
             var pb = makeB(g);
             pa.NewGame();
             pb.NewGame();
-            var rng = new Random(seed * 1000 + g);
+            var rng = new Random(seed * 1000 + g / 2);   // games 2k and 2k+1 share their random opening, colours swapped
             bool aFirst = g % 2 == 0;
             var state = TGame.Initial;
             Span<int> moves = stackalloc int[TGame.ActionCount];

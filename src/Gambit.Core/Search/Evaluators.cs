@@ -143,3 +143,14 @@ public sealed class CachedEvaluator<TGame> : IEvaluator<TGame> where TGame : str
         }
     }
 }
+
+/// <summary>Serialises calls to an evaluator that is not thread-safe (e.g. a GPU network shared by CPU-parallel games).</summary>
+public sealed class LockedEvaluator<TGame>(IEvaluator<TGame> inner) : IEvaluator<TGame> where TGame : struct, IGame<TGame>
+{
+    readonly object _gate = new();
+
+    public void Evaluate(ReadOnlySpan<TGame> states, Span<float> logits, Span<float> values)
+    {
+        lock (_gate) inner.Evaluate(states, logits, values);
+    }
+}
